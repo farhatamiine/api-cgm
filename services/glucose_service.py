@@ -4,6 +4,7 @@ from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,Glu
 from typing import Any,cast,List,Dict
 import pandas as pd
 import requests
+from datetime import datetime, timedelta
 
 def _calculate_gmi(avg_glucose: float) -> float:
     """Standard clinical GMI formula for mg/dL."""
@@ -26,9 +27,10 @@ class GlucoseService:
     def fetch_nightscout_data(self,count:int, days:str)->List[Dict[str,Any]]:
         """Fetches raw CGM entries from Nightscout."""
         headers = self.get_headers()
+        cutoff = (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d")
         params: Dict[str,Any]= {
             "count": count,  
-            "find[dateString][$gt]": days
+            "find[dateString][$gt]": cutoff
         }
         response = requests.get(f"{self.setting.nightscout_url}/api/v1/entries.json", headers=headers, params=params)
         if response.status_code != 200:

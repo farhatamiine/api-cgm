@@ -10,5 +10,6 @@ def health() -> Dict[str,Any]:
     return {
         "app_name":settings.app_name,
         "app_version":settings.app_version,
-        "app_status":"ok"
+        "app_status":"ok",
+        "url": settings.nightscout_url  # confirm new value loaded
     }

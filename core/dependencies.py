@@ -5,6 +5,7 @@ from services.glucose_service import GlucoseService
 
 def get_glucose_service() -> GlucoseService:
     settings = get_settings()
+    print(settings)
     return GlucoseService(
       settings=settings
     )
