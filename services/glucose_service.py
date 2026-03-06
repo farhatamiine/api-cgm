@@ -1,9 +1,11 @@
 from core.config import Settings
 import hashlib
-from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats
+from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats,GlucoVariabilityResponse,GlucoseFullReport,GlucosePatternResponse,GlucosePattern
+from collections import defaultdict
 from typing import Any,cast,List,Dict
 import pandas as pd
 import requests
+import numpy as np
 from datetime import datetime, timedelta
 
 def _calculate_gmi(avg_glucose: float) -> float:
@@ -41,13 +43,7 @@ class GlucoseService:
         df.drop(columns=to_drop,inplace=True,errors="ignore")
         return cast(List[Dict[str,Any]],df.to_dict(orient="records"))
     
-    
-    def get_stats(self,count:int, days:str ) -> GlucoStatsResponse:
-        records = self.fetch_nightscout_data(count,days)
-        """Computes glucostats from raw Nightscout records."""
-        if not records:
-            raise ValueError("No records provided.")
-
+    def get_stats(self,records:List[Dict[str,Any]],days:str) -> GlucoStatsResponse:
         values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
         if not values:
             raise ValueError("No valid glucose values found.")
@@ -56,11 +52,98 @@ class GlucoseService:
         avg = sum(values) / total
 
         return GlucoStatsResponse(
-            metadata=GlucoseMetadata(period_days=4, total_readings=total),
+            metadata=GlucoseMetadata(period_days=days, total_readings=total),
             stats=GlucoseStats(average=round(avg, 1), gmi=_calculate_gmi(avg)),
             ranges=GlucoseRanges(
                 tir=round(sum(1 for v in values if 70 <= v <= 180) / total * 100, 1),
-                high=round(sum(1 for v in values if v > 180) / total * 100, 1),
-                low=round(sum(1 for v in values if v < 70) / total * 100, 1),
+                tar=round(sum(1 for v in values if v > 180) / total * 100, 1),
+                tbr=round(sum(1 for v in values if v < 70) / total * 100, 1),
             )
+        )
+
+    def get_variability(self,records:List[Dict[str,Any]]) -> GlucoVariabilityResponse:
+        values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
+        if not values:
+            raise ValueError("No valid glucose values found.")
+        
+        std_dev = round(float(np.std(values)), 1)
+        cv=round(float((np.std(a=values) / np.mean(values)) * 100), 1)
+        highest = max(values)
+        lowest  = min(values)
+        flag    = "STABLE" if cv <= 36 else "HIGH VARIABILITY"
+        return GlucoVariabilityResponse(
+            std_dev=std_dev,
+            cv=cv,
+            flag=flag,
+            highest=highest,
+            lowest=lowest
+        )
+
+
+    def get_patterns(self,records:List[Dict[str,Any]]) -> GlucosePatternResponse:
+        
+        buckets:Dict[str, List[int]] = defaultdict(list)
+        for r in records:
+            hour = datetime.fromisoformat(r["dateString"]).hour
+            if 6 <= hour < 12:
+                buckets["morning"].append(int(r["sgv"]))
+            elif 12 <= hour < 18:
+                buckets["afternoon"].append(int(r["sgv"]))
+            elif 18 <= hour < 24:
+                buckets["evening"].append(int(r["sgv"]))
+            else:
+                buckets["night"].append(int(r["sgv"]))
+                
+        
+        morning:GlucosePattern = GlucosePattern(
+            avg=round(np.mean(buckets["morning"])),
+            reading=len(buckets["morning"]),
+            time="06:00-12:00"
+        )
+        
+        afternoon:GlucosePattern = GlucosePattern(
+            avg=round(np.mean(buckets["afternoon"])),
+            reading=len(buckets["afternoon"]),
+            time="12:00-18:00"
+        )
+        
+        evening:GlucosePattern = GlucosePattern(
+            avg=round(np.mean(buckets["evening"])),
+            reading=len(buckets["evening"]),
+            time="18:00-00:00"
+        )
+        
+        night:GlucosePattern = GlucosePattern(
+            avg=round(np.mean(buckets["night"])),
+            reading=len(buckets["night"]),
+            time="00:00-06:00"
+        )
+        
+        periods = {
+            "morning":   morning.avg,
+            "afternoon": afternoon.avg,
+            "evening":   evening.avg,
+            "night":     night.avg
+        }
+        
+        return GlucosePatternResponse(
+            afternoon=afternoon,
+            evening=evening,
+            morning=morning,
+            night=night,
+            worst_period=max(periods,key=lambda x: periods[x]),
+        )
+
+    def get_full_report(self,count:int,days:str) -> GlucoseFullReport:
+        records = self.fetch_nightscout_data(count,days)
+        if not records:
+            raise ValueError("No records provided.")
+        variability:GlucoVariabilityResponse = self.get_variability(records=records)
+        stats:GlucoStatsResponse = self.get_stats(records=records,days=days)
+        patterns:GlucosePatternResponse = self.get_patterns(records=records)
+        
+        return GlucoseFullReport(
+            stats=stats,
+            variability=variability,
+            patterns=patterns
         )

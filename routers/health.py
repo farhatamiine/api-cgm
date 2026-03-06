@@ -4,7 +4,7 @@ from core.config import get_settings
 health_router=APIRouter()
 
 
-@health_router.get('/health')
+@health_router.get('/')
 def health() -> Dict[str,Any]:
     settings = get_settings()
     return {
