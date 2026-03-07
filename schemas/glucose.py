@@ -39,10 +39,7 @@ class GlucoVariabilityResponse(BaseModel):
     flag:str = Field(...,description='Glucose variability')
     
 
-class GlucoseFullReport(BaseModel):
-    stats:GlucoStatsResponse
-    variability:GlucoVariabilityResponse
-    patterns:GlucosePatternResponse
+
     
 class GlucosePattern(BaseModel):
     avg:int
@@ -56,3 +53,15 @@ class GlucosePatternResponse(BaseModel):
     evening:GlucosePattern
     night:GlucosePattern
     worst_period:str
+    
+class GlucoseDawnPhenomenon(BaseModel):
+    avg_2am:float    
+    avg_7am:float    
+    delta:float    
+    flag:str    
+    interpretation:str    
+class GlucoseFullReport(BaseModel):
+    stats:GlucoStatsResponse
+    variability:GlucoVariabilityResponse
+    patterns:GlucosePatternResponse
+    dawn_phenomenon:GlucoseDawnPhenomenon

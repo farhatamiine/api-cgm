@@ -1,12 +1,18 @@
 from core.config import Settings
 import hashlib
-from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats,GlucoVariabilityResponse,GlucoseFullReport,GlucosePatternResponse,GlucosePattern
-from collections import defaultdict
+from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats,GlucoVariabilityResponse,GlucoseFullReport,GlucosePatternResponse,GlucosePattern,GlucoseDawnPhenomenon
+from schemas.bolus import BolusTimingResponse
 from typing import Any,cast,List,Dict
+from collections import defaultdict
 import pandas as pd
 import requests
 import numpy as np
+from core.logger import get_logger
 from datetime import datetime, timedelta
+
+
+logger = get_logger(__name__)
+
 
 def _calculate_gmi(avg_glucose: float) -> float:
     """Standard clinical GMI formula for mg/dL."""
@@ -79,6 +85,69 @@ class GlucoseService:
             lowest=lowest
         )
 
+    def get_bolus_timing(self,meal_type:str) -> BolusTimingResponse:
+        
+        glucose = self.get_current()["sgv"]
+    
+        match meal_type:
+            case "low_gi":
+                gi_modifier = -3
+            case "medium_gi":
+                gi_modifier = 0
+            case "high_gi":
+                gi_modifier = 5
+            case _:
+                gi_modifier = 0
+
+        if glucose < 90:
+            base = 0
+        elif glucose < 120:
+            base = 12
+        elif glucose < 150:
+            base = 17
+        elif glucose < 180:
+            base = 22
+        else:
+            base = -1
+
+        final = -1 if base == -1 else base + gi_modifier
+
+        message = (
+            "Correct your glucose first before bolusing for a meal."
+            if final == -1
+            else f"Inject {final} minutes before eating."
+        )
+
+        warning = (
+            "Glucose too high to bolus for meal." 
+            if final == -1 
+            else None
+        )
+
+        return BolusTimingResponse(
+            inject_minutes_before=final,
+            message=message,
+            warning=warning
+        )
+
+
+
+    def get_current(self) -> Dict[str,Any]:
+        headers = self.get_headers()
+        response = requests.get(
+            f"{self.setting.nightscout_url}/api/v1/entries/current.json",
+            headers=headers
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed: {response.status_code}")
+        
+        data = response.json()[0]  # returns a list, take first
+        return {
+            "sgv": data["sgv"],
+            "direction": data.get("direction", "Unknown"),
+            "trend": data.get("trend", 0),
+            "timestamp": data.get("dateString", "")
+        }
 
     def get_patterns(self,records:List[Dict[str,Any]]) -> GlucosePatternResponse:
         
@@ -134,6 +203,50 @@ class GlucoseService:
             worst_period=max(periods,key=lambda x: periods[x]),
         )
 
+
+    def _get_dawn_flag(self, delta: float) -> str:
+        if delta < 15:
+            return "NONE"
+        elif delta < 30:
+            return "MILD"
+        elif delta < 50:
+            return "MODERATE"
+        return "SEVERE"
+    
+    
+    def _get_dawn_interpretation(self, delta: float, flag: str) -> str:
+        return (
+            f"Your glucose rose {round(delta)} mg/dL while sleeping. "
+            f"{flag} dawn phenomenon detected. "
+            + ("Basal insulin is covering well." if flag == "NONE" else
+            "Consider discussing basal adjustment with your doctor." if flag in ("MODERATE", "SEVERE") else
+            "Monitor overnight trend."))
+    
+    def get_dawn_phenomenon_check(self,records:List[Dict[str,Any]]) -> GlucoseDawnPhenomenon:
+        if not records:
+            raise ValueError("No records provided.")
+        
+        readings_2am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 2]
+        readings_7am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 7]
+        
+        
+        avg_2am = round(float(np.mean(readings_2am)), 1)
+        avg_7am = round(float(np.mean(readings_7am)), 1)
+        delta = np.abs(avg_7am-avg_2am)
+        flag = self._get_dawn_flag(delta)
+        interpretation = self._get_dawn_interpretation(delta,flag=flag)
+        
+        
+        return GlucoseDawnPhenomenon(
+            avg_2am=avg_2am,
+            avg_7am=avg_7am,
+            delta=delta,
+            flag=flag,
+            interpretation=interpretation
+        )
+
+
+
     def get_full_report(self,count:int,days:str) -> GlucoseFullReport:
         records = self.fetch_nightscout_data(count,days)
         if not records:
@@ -141,9 +254,11 @@ class GlucoseService:
         variability:GlucoVariabilityResponse = self.get_variability(records=records)
         stats:GlucoStatsResponse = self.get_stats(records=records,days=days)
         patterns:GlucosePatternResponse = self.get_patterns(records=records)
+        dawn_phenomenon:GlucoseDawnPhenomenon = self.get_dawn_phenomenon_check(records=records)
         
         return GlucoseFullReport(
             stats=stats,
             variability=variability,
-            patterns=patterns
+            patterns=patterns,
+            dawn_phenomenon=dawn_phenomenon
         )
