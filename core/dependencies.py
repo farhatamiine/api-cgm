@@ -10,6 +10,7 @@ from services.bolus_service import BolusService
 from services.glucose_service import GlucoseService
 from services.hypo_service import HypoService
 from services.insight_service import InsightsService
+from services.report_service import MonthlyReportService
 
 
 def get_glucose_service() -> GlucoseService:
@@ -35,3 +36,13 @@ def get_insights_service(
 ) -> InsightsService:
     settings = get_settings()
     return InsightsService(db=db, glucose_service=glucose_service, settings=settings)
+
+
+def get_monthly_report_service(
+    db: Session = Depends(get_db),
+    glucose_service: GlucoseService = Depends(get_glucose_service),
+) -> MonthlyReportService:
+    settings = get_settings()
+    return MonthlyReportService(
+        db=db, glucose_service=glucose_service, settings=settings
+    )

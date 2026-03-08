@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,9 +10,9 @@ class Settings(BaseSettings):
     nightscout_url: str
     nightscout_secret: str
     api_key: str
-    openai_api_key: str
+    openai_api_key: str = ""
     database_url: str
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
     model_config = SettingsConfigDict(env_file=".env")
 
 
