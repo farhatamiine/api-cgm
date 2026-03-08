@@ -6,6 +6,9 @@ health_router=APIRouter()
 
 @health_router.get('/')
 def health() -> Dict[str,Any]:
+    """
+    Returns the application status, name, and version.
+    """
     settings = get_settings()
     return {
         "app_name":settings.app_name,

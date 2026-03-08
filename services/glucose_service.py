@@ -1,6 +1,7 @@
 from core.config import Settings
 import hashlib
-from schemas.glucose import GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats,GlucoVariabilityResponse,GlucoseFullReport,GlucosePatternResponse,GlucosePattern,GlucoseDawnPhenomenon
+from models.glucose import AGPHour
+from schemas.glucose import AGPResponse, GlucoStatsResponse,GlucoseMetadata,GlucoseRanges,GlucoseStats,GlucoVariabilityResponse,GlucoseFullReport,GlucosePatternResponse,GlucosePattern,GlucoseDawnPhenomenon
 from schemas.bolus import BolusTimingResponse
 from typing import Any,cast,List,Dict
 from collections import defaultdict
@@ -14,9 +15,157 @@ from datetime import datetime, timedelta
 logger = get_logger(__name__)
 
 
+# Calculates Glucose Management Indicator (GMI)
 def _calculate_gmi(avg_glucose: float) -> float:
     """Standard clinical GMI formula for mg/dL."""
     return round(3.31 + (0.02392 * avg_glucose), 1)
+
+
+# Computes basic glucose statistics and TIR/TAR/TBR ranges
+def get_stats(records:List[Dict[str,Any]], days:str) -> GlucoStatsResponse:
+    values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
+    if not values:
+        raise ValueError("No valid glucose values found.")
+
+    total = len(values)
+    avg = sum(values) / total
+
+    return GlucoStatsResponse(
+        metadata=GlucoseMetadata(period_days=days, total_readings=total),
+        stats=GlucoseStats(average=round(avg, 1), gmi=_calculate_gmi(avg)),
+        ranges=GlucoseRanges(
+            tir=round(sum(1 for v in values if 70 <= v <= 180) / total * 100, 1),
+            tar=round(sum(1 for v in values if v > 180) / total * 100, 1),
+            tbr=round(sum(1 for v in values if v < 70) / total * 100, 1),
+        )
+    )
+
+
+# Analyzes glucose variability (Std Dev, CV)
+def get_variability(records:List[Dict[str,Any]]) -> GlucoVariabilityResponse:
+    values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
+    if not values:
+        raise ValueError("No valid glucose values found.")
+
+    std_dev = round(float(np.std(values)), 1)
+    cv=round(float((np.std(a=values) / np.mean(values)) * 100), 1)
+    highest = max(values)
+    lowest  = min(values)
+    flag    = "STABLE" if cv <= 36 else "HIGH VARIABILITY"
+    return GlucoVariabilityResponse(
+        std_dev=std_dev,
+        cv=cv,
+        flag=flag,
+        highest=highest,
+        lowest=lowest
+    )
+
+
+# Identifies glucose patterns across different times of the day
+def get_patterns(records:List[Dict[str,Any]]) -> GlucosePatternResponse:
+
+    buckets:Dict[str, List[int]] = defaultdict(list)
+    for r in records:
+        hour = datetime.fromisoformat(r["dateString"]).hour
+        if 6 <= hour < 12:
+            buckets["morning"].append(int(r["sgv"]))
+        elif 12 <= hour < 18:
+            buckets["afternoon"].append(int(r["sgv"]))
+        elif 18 <= hour < 24:
+            buckets["evening"].append(int(r["sgv"]))
+        else:
+            buckets["night"].append(int(r["sgv"]))
+
+
+    morning:GlucosePattern = GlucosePattern(
+        avg=round(np.mean(buckets["morning"])),
+        reading=len(buckets["morning"]),
+        time="06:00-12:00"
+    )
+
+    afternoon:GlucosePattern = GlucosePattern(
+        avg=round(np.mean(buckets["afternoon"])),
+        reading=len(buckets["afternoon"]),
+        time="12:00-18:00"
+    )
+
+    evening:GlucosePattern = GlucosePattern(
+        avg=round(np.mean(buckets["evening"])),
+        reading=len(buckets["evening"]),
+        time="18:00-00:00"
+    )
+
+    night:GlucosePattern = GlucosePattern(
+        avg=round(np.mean(buckets["night"])),
+        reading=len(buckets["night"]),
+        time="00:00-06:00"
+    )
+
+    periods = {
+        "morning":   morning.avg,
+        "afternoon": afternoon.avg,
+        "evening":   evening.avg,
+        "night":     night.avg
+    }
+
+    return GlucosePatternResponse(
+        afternoon=afternoon,
+        evening=evening,
+        morning=morning,
+        night=night,
+        worst_period=max(periods,key=lambda x: periods[x]),
+    )
+
+
+# Determines the severity flag for a dawn phenomenon
+def _get_dawn_flag(delta: float) -> str:
+    if delta < 15:
+        return "NONE"
+    elif delta < 30:
+        return "MILD"
+    elif delta < 50:
+        return "MODERATE"
+    return "SEVERE"
+
+
+# Generates an interpretation message for a dawn phenomenon
+def _get_dawn_interpretation(delta: float, flag: str) -> str:
+    return (
+        f"Your glucose rose {round(delta)} mg/dL while sleeping. "
+        f"{flag} dawn phenomenon detected. "
+        + ("Basal insulin is covering well." if flag == "NONE" else
+        "Consider discussing basal adjustment with your doctor." if flag in ("MODERATE", "SEVERE") else
+        "Monitor overnight trend."))
+
+
+# Checks for a dawn phenomenon by comparing 2 AM and 7 AM averages
+def get_dawn_phenomenon_check(records:List[Dict[str,Any]]) -> GlucoseDawnPhenomenon:
+    if not records:
+        raise ValueError("No records provided.")
+
+    readings_2am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 2]
+    readings_7am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 7]
+
+
+    avg_2am = round(float(np.mean(readings_2am)), 1)
+    avg_7am = round(float(np.mean(readings_7am)), 1)
+    delta = np.abs(avg_7am-avg_2am)
+    flag = _get_dawn_flag(delta)
+    interpretation = _get_dawn_interpretation(delta,flag=flag)
+
+
+    return GlucoseDawnPhenomenon(
+        avg_2am=avg_2am,
+        avg_7am=avg_7am,
+        delta=delta,
+        flag=flag,
+        interpretation=interpretation
+    )
+    
+    
+def calculate_count(days: int) -> int:
+    READINGS_PER_DAY = 288  # every 5 minutes
+    return days * READINGS_PER_DAY
 
 
 class GlucoseService:
@@ -32,12 +181,12 @@ class GlucoseService:
     
 
 
-    def fetch_nightscout_data(self,count:int, days:str)->List[Dict[str,Any]]:
+    def fetch_nightscout_data(self,days:str)->List[Dict[str,Any]]:
         """Fetches raw CGM entries from Nightscout."""
         headers = self.get_headers()
         cutoff = (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d")
         params: Dict[str,Any]= {
-            "count": count,  
+            "count": calculate_count(int(days)),  
             "find[dateString][$gt]": cutoff
         }
         response = requests.get(f"{self.setting.nightscout_url}/api/v1/entries.json", headers=headers, params=params)
@@ -48,42 +197,6 @@ class GlucoseService:
         to_drop =  ["noise","filtered","unfiltered","rssi","utcOffset","sysTime"]
         df.drop(columns=to_drop,inplace=True,errors="ignore")
         return cast(List[Dict[str,Any]],df.to_dict(orient="records"))
-    
-    def get_stats(self,records:List[Dict[str,Any]],days:str) -> GlucoStatsResponse:
-        values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
-        if not values:
-            raise ValueError("No valid glucose values found.")
-
-        total = len(values)
-        avg = sum(values) / total
-
-        return GlucoStatsResponse(
-            metadata=GlucoseMetadata(period_days=days, total_readings=total),
-            stats=GlucoseStats(average=round(avg, 1), gmi=_calculate_gmi(avg)),
-            ranges=GlucoseRanges(
-                tir=round(sum(1 for v in values if 70 <= v <= 180) / total * 100, 1),
-                tar=round(sum(1 for v in values if v > 180) / total * 100, 1),
-                tbr=round(sum(1 for v in values if v < 70) / total * 100, 1),
-            )
-        )
-
-    def get_variability(self,records:List[Dict[str,Any]]) -> GlucoVariabilityResponse:
-        values = [int(r["sgv"]) for r in records if r.get("sgv") is not None]
-        if not values:
-            raise ValueError("No valid glucose values found.")
-        
-        std_dev = round(float(np.std(values)), 1)
-        cv=round(float((np.std(a=values) / np.mean(values)) * 100), 1)
-        highest = max(values)
-        lowest  = min(values)
-        flag    = "STABLE" if cv <= 36 else "HIGH VARIABILITY"
-        return GlucoVariabilityResponse(
-            std_dev=std_dev,
-            cv=cv,
-            flag=flag,
-            highest=highest,
-            lowest=lowest
-        )
 
     def get_bolus_timing(self,meal_type:str) -> BolusTimingResponse:
         
@@ -149,116 +262,45 @@ class GlucoseService:
             "timestamp": data.get("dateString", "")
         }
 
-    def get_patterns(self,records:List[Dict[str,Any]]) -> GlucosePatternResponse:
-        
-        buckets:Dict[str, List[int]] = defaultdict(list)
-        for r in records:
-            hour = datetime.fromisoformat(r["dateString"]).hour
-            if 6 <= hour < 12:
-                buckets["morning"].append(int(r["sgv"]))
-            elif 12 <= hour < 18:
-                buckets["afternoon"].append(int(r["sgv"]))
-            elif 18 <= hour < 24:
-                buckets["evening"].append(int(r["sgv"]))
-            else:
-                buckets["night"].append(int(r["sgv"]))
-                
-        
-        morning:GlucosePattern = GlucosePattern(
-            avg=round(np.mean(buckets["morning"])),
-            reading=len(buckets["morning"]),
-            time="06:00-12:00"
-        )
-        
-        afternoon:GlucosePattern = GlucosePattern(
-            avg=round(np.mean(buckets["afternoon"])),
-            reading=len(buckets["afternoon"]),
-            time="12:00-18:00"
-        )
-        
-        evening:GlucosePattern = GlucosePattern(
-            avg=round(np.mean(buckets["evening"])),
-            reading=len(buckets["evening"]),
-            time="18:00-00:00"
-        )
-        
-        night:GlucosePattern = GlucosePattern(
-            avg=round(np.mean(buckets["night"])),
-            reading=len(buckets["night"]),
-            time="00:00-06:00"
-        )
-        
-        periods = {
-            "morning":   morning.avg,
-            "afternoon": afternoon.avg,
-            "evening":   evening.avg,
-            "night":     night.avg
-        }
-        
-        return GlucosePatternResponse(
-            afternoon=afternoon,
-            evening=evening,
-            morning=morning,
-            night=night,
-            worst_period=max(periods,key=lambda x: periods[x]),
-        )
-
-
-    def _get_dawn_flag(self, delta: float) -> str:
-        if delta < 15:
-            return "NONE"
-        elif delta < 30:
-            return "MILD"
-        elif delta < 50:
-            return "MODERATE"
-        return "SEVERE"
-    
-    
-    def _get_dawn_interpretation(self, delta: float, flag: str) -> str:
-        return (
-            f"Your glucose rose {round(delta)} mg/dL while sleeping. "
-            f"{flag} dawn phenomenon detected. "
-            + ("Basal insulin is covering well." if flag == "NONE" else
-            "Consider discussing basal adjustment with your doctor." if flag in ("MODERATE", "SEVERE") else
-            "Monitor overnight trend."))
-    
-    def get_dawn_phenomenon_check(self,records:List[Dict[str,Any]]) -> GlucoseDawnPhenomenon:
+    def get_full_report(self,days:str) -> GlucoseFullReport:
+        records = self.fetch_nightscout_data(days)
         if not records:
             raise ValueError("No records provided.")
-        
-        readings_2am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 2]
-        readings_7am = [int(r["sgv"]) for r in records if datetime.fromisoformat(r["dateString"]).hour == 7]
-        
-        
-        avg_2am = round(float(np.mean(readings_2am)), 1)
-        avg_7am = round(float(np.mean(readings_7am)), 1)
-        delta = np.abs(avg_7am-avg_2am)
-        flag = self._get_dawn_flag(delta)
-        interpretation = self._get_dawn_interpretation(delta,flag=flag)
-        
-        
-        return GlucoseDawnPhenomenon(
-            avg_2am=avg_2am,
-            avg_7am=avg_7am,
-            delta=delta,
-            flag=flag,
-            interpretation=interpretation
-        )
-
-
-
-    def get_full_report(self,count:int,days:str) -> GlucoseFullReport:
-        records = self.fetch_nightscout_data(count,days)
-        if not records:
-            raise ValueError("No records provided.")
-        variability:GlucoVariabilityResponse = self.get_variability(records=records)
-        stats:GlucoStatsResponse = self.get_stats(records=records,days=days)
-        patterns:GlucosePatternResponse = self.get_patterns(records=records)
-        dawn_phenomenon:GlucoseDawnPhenomenon = self.get_dawn_phenomenon_check(records=records)
-        
+        variability:GlucoVariabilityResponse = get_variability(records=records)
+        stats:GlucoStatsResponse = get_stats(records=records,days=days)
+        patterns:GlucosePatternResponse = get_patterns(records=records)
+        dawn_phenomenon:GlucoseDawnPhenomenon = get_dawn_phenomenon_check(records=records)
+        agp:AGPResponse = self.calculate_agp(records=records)
         return GlucoseFullReport(
             stats=stats,
             variability=variability,
             patterns=patterns,
-            dawn_phenomenon=dawn_phenomenon
+            dawn_phenomenon=dawn_phenomenon,
+            agp=agp
         )
+        
+        
+    def calculate_agp(self,records:List[Dict[str,Any]]) -> AGPResponse:
+        if not records:
+            raise ValueError("No records provided.")
+        buckets:Dict[int, List[int]] = defaultdict(list)
+        agp:List[AGPHour] = []
+        for r in records:
+            hour = datetime.fromisoformat(r["dateString"]).hour
+            buckets[hour].append(int(r['sgv']))
+        for hour in  range(24):
+            values = buckets[hour]
+            if not values:
+                continue
+            agp.append(
+                AGPHour(
+                    hour=hour,
+                    p25=round(float(np.percentile(values,25)),1),
+                    p5=round(float(np.percentile(values,5)),1),
+                    p50=round(float(np.percentile(values,50)),1),
+                    p95=round(float(np.percentile(values,95)),1),
+                    p75=round(float(np.percentile(values,75)),1)
+                )
+            )
+        
+        return AGPResponse(hours=agp)

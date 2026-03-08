@@ -11,8 +11,11 @@ bolus_router=APIRouter()
 
 @bolus_router.get('/timing',response_model=BolusTimingResponse)
 def get_bolus(
-    meal_type: str = Query(default="medium_gi", description="Number of CGM readings"),
+    meal_type: str = Query(default="medium_gi", description="Type of meal (low_gi, medium_gi, high_gi)"),
     service: GlucoseService = Depends(get_glucose_service)):
+    """
+    Calculates the optimal timing for an insulin bolus based on current glucose level and meal GI.
+    """
     try:
         return service.get_bolus_timing(meal_type=meal_type)
     except RuntimeError as e:

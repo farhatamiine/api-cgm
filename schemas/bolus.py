@@ -4,6 +4,7 @@ from typing import Any
 
 
 class BolusTimingResponse(BaseModel):
-    inject_minutes_before: int = Field(..., description="Time In Range 70–180 mg/dL (%)")
-    message: str = Field(..., description="Time Above Range >180 mg/dL (%)")
-    warning: Any = Field(..., description="Time Below Range <70 mg/dL (%)")
+    """Response model for optimal insulin bolus timing."""
+    inject_minutes_before: int = Field(..., description="Recommended lead time in minutes before eating")
+    message: str = Field(..., description="Actionable advice for the user")
+    warning: Any = Field(None, description="Critical warning if glucose is too high for safe bolusing")
