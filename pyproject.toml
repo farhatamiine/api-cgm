@@ -6,9 +6,11 @@ dependencies = [
     "fastapi[standard]>=0.135.1",
     "numpy>=2.4.2",
     "pandas>=3.0.1",
+    "psycopg2-binary>=2.9.11",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.2",
     "requests>=2.32.5",
+    "sqlalchemy>=2.0.48",
     "uvicorn[standard]>=0.41.0",
 ]
