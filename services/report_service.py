@@ -25,6 +25,8 @@ from schemas.report import (
 from services.glucose_service import GlucoseService
 
 logger = get_logger(__name__)
+REPORTS_DIR = "/app/reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
@@ -320,11 +322,11 @@ RECOMMENDATIONS
             TableStyle,
         )
 
-        tmp_dir = tempfile.gettempdir()
-        filename = os.path.join(tmp_dir, f"glucoapi_report_{report.generated_at}.pdf")
+        filename = os.path.join(
+            REPORTS_DIR, f"glucoapi_report_{report.generated_at}.pdf"
+        )
 
         print(f"Saving PDF to: {filename}")
-        print(f"Tmp dir: {tmp_dir}")
         doc = SimpleDocTemplate(
             filename,
             pagesize=A4,

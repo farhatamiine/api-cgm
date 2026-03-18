@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from core.dependencies import get_monthly_report_service
 from schemas.report import MonthlyReportResponse
-from services.report_service import MonthlyReportService
+from services.report_service import REPORTS_DIR, MonthlyReportService
 
 reports_router = APIRouter()
 
@@ -45,9 +45,7 @@ async def generate_monthly_report(
 )
 def download_report(report_date: date):
     """Download the generated PDF report for a given date."""
-    path = os.path.join(
-        tempfile.gettempdir(), f"glucoapi_report_{report_date.isoformat()}.pdf"
-    )
+    path = os.path.join(REPORTS_DIR, f"glucoapi_report_{report_date.isoformat()}.pdf")
     if not os.path.exists(path):
         raise HTTPException(
             status_code=404, detail="Report not found. Generate it first."
