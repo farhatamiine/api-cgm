@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from core.auth import get_current_user
 from core.dependencies import get_insights_service
 from schemas.insight import WeeklyInsightRequest, WeeklyInsightResponse
 from services.insight_service import InsightsService
@@ -14,6 +15,7 @@ insights_router = APIRouter()
 )
 async def analyse(
     payload: WeeklyInsightRequest = WeeklyInsightRequest(),
+    current_user=Depends(get_current_user),
     service: InsightsService = Depends(get_insights_service),
 ):
     """
@@ -24,7 +26,7 @@ async def analyse(
     - Returns `cached: true` with no API cost if called multiple times today
     """
     try:
-        result = await service.get_weekly_insight(days=payload.days)
+        result = await service.get_weekly_insight(user_id=current_user.id, days=payload.days)
         return WeeklyInsightResponse(**result)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))

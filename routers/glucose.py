@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from models.user import User
 from typing import Dict, Any
-from utils.glucose import caluclate_bmi
+from utils.glucose import calculate_bmi
 from schemas.glucose import GlucoseFullReport
 from services.glucose_service import GlucoseService
 from core.dependencies import get_glucose_service
@@ -34,6 +34,6 @@ def analyse(user: User) -> Dict[str, Any]:
         return {"error": "User not provided"}
     return {
         "user": user.full_name,
-        "bmi": caluclate_bmi(user),
+        "bmi": calculate_bmi(user),
         "basal_units": user.basal_unit,
     }

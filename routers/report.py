@@ -4,6 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from core.auth import get_current_user
 from core.dependencies import get_monthly_report_service
 from schemas.report import MonthlyReportResponse
 from services.report_service import REPORTS_DIR, MonthlyReportService
@@ -18,6 +19,7 @@ reports_router = APIRouter()
 )
 async def generate_monthly_report(
     days: int = Query(default=30, ge=7, le=90, description="Lookback period in days"),
+    current_user=Depends(get_current_user),
     service: MonthlyReportService = Depends(get_monthly_report_service),
 ):
     """
@@ -30,7 +32,7 @@ async def generate_monthly_report(
     - PDF download URL
     """
     try:
-        return await service.generate_monthly_report(days=days)
+        return await service.generate_monthly_report(user_id=current_user.id, days=days)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:

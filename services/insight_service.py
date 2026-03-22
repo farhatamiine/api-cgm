@@ -48,38 +48,38 @@ class InsightsService:
 
     # ── Data aggregation ───────────────────────────────────────────────────
 
-    def _build_lean_summary(self, days: int) -> Dict[str, Any]:
+    def _build_lean_summary(self, user_id: int, days: int) -> Dict[str, Any]:
         """
         Aggregate all data into a small dict.
         NEVER sends raw CGM readings — only computed metrics.
         """
         glucose_report = self.glucose_service.get_full_report(days=str(days))
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        meal_correlation = self.meal_service.get_correlation(days=str(days))
+        meal_correlation = self.meal_service.get_correlation(user_id, days=days)
 
         # hypo stats from DB
         hypo_count = (
             self.db.query(func.count(HypoEvent.id))
-            .filter(HypoEvent.started_at >= cutoff)
+            .filter(HypoEvent.user_id == user_id, HypoEvent.started_at >= cutoff)
             .scalar()
             or 0
         )
         avg_hypo_duration = (
             self.db.query(func.avg(HypoEvent.duration_min))
-            .filter(HypoEvent.started_at >= cutoff)
+            .filter(HypoEvent.user_id == user_id, HypoEvent.started_at >= cutoff)
             .scalar()
         )
 
         # bolus stats from DB
         bolus_count = (
             self.db.query(func.count(BolusLog.id))
-            .filter(BolusLog.timestamp >= cutoff)
+            .filter(BolusLog.user_id == user_id, BolusLog.timestamp >= cutoff)
             .scalar()
             or 0
         )
         avg_bolus_units = (
             self.db.query(func.avg(BolusLog.units))
-            .filter(BolusLog.timestamp >= cutoff)
+            .filter(BolusLog.user_id == user_id, BolusLog.timestamp >= cutoff)
             .scalar()
         )
 
@@ -97,6 +97,7 @@ class InsightsService:
             "dawn_phenomenon": glucose_report.dawn_phenomenon.flag,
             "dawn_delta_mgdl": round(glucose_report.dawn_phenomenon.delta, 1),
             "hypo_count": hypo_count,
+            "meal_correlation": meal_correlation,
             "avg_hypo_duration_min": round(avg_hypo_duration, 1)
             if avg_hypo_duration
             else None,
@@ -195,7 +196,7 @@ Max 200 words."""
 
     # ── Main entry point ───────────────────────────────────────────────────
 
-    async def get_weekly_insight(self, days: int = 7) -> Dict[str, Any]:
+    async def get_weekly_insight(self, user_id: int, days: int = 7) -> Dict[str, Any]:
         # 1. check cache
         cached = self._get_cached_insight()
         if cached:
@@ -208,7 +209,7 @@ Max 200 words."""
             }
 
         # 2. build lean summary
-        summary = self._build_lean_summary(days=days)
+        summary = self._build_lean_summary(user_id=user_id, days=days)
         prompt = self._build_prompt(summary)
         logger.info(
             f"Calling Claude API for insight — ~{len(prompt.split())} words in prompt"

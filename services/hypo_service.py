@@ -17,7 +17,7 @@ class HypoService:
         self.db = db
         self.glucose_service = glucose_service
 
-    def create_hypo(self, payload: HypoCreate) -> HypoEvent:
+    def create_hypo(self, payload: HypoCreate, user_id: int) -> HypoEvent:
         # auto-detect ended_at if not provided
         ended_at = payload.ended_at
         if ended_at is None:
@@ -37,6 +37,7 @@ class HypoService:
             recovery_min=payload.recovery_min,
             treated_with=payload.treated_with,
             notes=payload.notes,
+            user_id=user_id,
         )
         try:
             self.db.add(hypo)
@@ -51,9 +52,10 @@ class HypoService:
             logger.error(f"Failed to save hypo: {e}")
             raise
 
-    def list_hypos(self, limit: int = 20) -> List[HypoEvent]:
+    def list_hypos(self, user_id: int, limit: int = 20) -> List[HypoEvent]:
         return (
             self.db.query(HypoEvent)
+            .filter(HypoEvent.user_id == user_id)
             .order_by(desc(HypoEvent.started_at))
             .limit(limit)
             .all()

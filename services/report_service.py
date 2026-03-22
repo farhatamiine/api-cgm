@@ -77,14 +77,14 @@ class MonthlyReportService:
 
     # ── Basal assessment ───────────────────────────────────────────────────
 
-    def _basal_assessment(self, cutoff: datetime) -> BasalAssessment:
+    def _basal_assessment(self, user_id: int, cutoff: datetime) -> BasalAssessment:
         records: List[BasalLog] = (
-            self.db.query(BasalLog).filter(BasalLog.timestamp >= cutoff).all()
+            self.db.query(BasalLog).filter(BasalLog.user_id == user_id, BasalLog.timestamp >= cutoff).all()
         )
         total = len(records)
         avg_units_raw: Any = (
             self.db.query(func.avg(BasalLog.units))
-            .filter(BasalLog.timestamp >= cutoff)
+            .filter(BasalLog.user_id == user_id, BasalLog.timestamp >= cutoff)
             .scalar()
         )
         avg_units = round(float(avg_units_raw or 0), 2)
@@ -118,14 +118,14 @@ class MonthlyReportService:
 
     # ── Bolus patterns ─────────────────────────────────────────────────────
 
-    def _bolus_patterns(self, cutoff: datetime) -> BolusPatternsReport:
+    def _bolus_patterns(self, user_id: int, cutoff: datetime) -> BolusPatternsReport:
         records: List[BolusLog] = (
-            self.db.query(BolusLog).filter(BolusLog.timestamp >= cutoff).all()
+            self.db.query(BolusLog).filter(BolusLog.user_id == user_id, BolusLog.timestamp >= cutoff).all()
         )
         total = len(records)
         avg_units_raw: Any = (
             self.db.query(func.avg(BolusLog.units))
-            .filter(BolusLog.timestamp >= cutoff)
+            .filter(BolusLog.user_id == user_id, BolusLog.timestamp >= cutoff)
             .scalar()
         )
         avg_units = round(float(avg_units_raw or 0), 2)
@@ -137,7 +137,7 @@ class MonthlyReportService:
 
         avg_glucose_raw: Any = (
             self.db.query(func.avg(BolusLog.glucose_at_injection))
-            .filter(BolusLog.timestamp >= cutoff)
+            .filter(BolusLog.user_id == user_id, BolusLog.timestamp >= cutoff)
             .scalar()
         )
 
@@ -157,20 +157,20 @@ class MonthlyReportService:
 
     # ── Hypo analysis ──────────────────────────────────────────────────────
 
-    def _hypo_analysis(self, cutoff: datetime) -> HypoAnalysis:
+    def _hypo_analysis(self, user_id: int, cutoff: datetime) -> HypoAnalysis:
         records: List[HypoEvent] = (
-            self.db.query(HypoEvent).filter(HypoEvent.started_at >= cutoff).all()
+            self.db.query(HypoEvent).filter(HypoEvent.user_id == user_id, HypoEvent.started_at >= cutoff).all()
         )
         total = len(records)
 
         avg_lowest_raw: Any = (
             self.db.query(func.avg(HypoEvent.lowest_value))
-            .filter(HypoEvent.started_at >= cutoff)
+            .filter(HypoEvent.user_id == user_id, HypoEvent.started_at >= cutoff)
             .scalar()
         )
         avg_duration_raw: Any = (
             self.db.query(func.avg(HypoEvent.duration_min))
-            .filter(HypoEvent.started_at >= cutoff)
+            .filter(HypoEvent.user_id == user_id, HypoEvent.started_at >= cutoff)
             .scalar()
         )
 
@@ -655,7 +655,7 @@ RECOMMENDATIONS
 
     # ── Main entry point ───────────────────────────────────────────────────
 
-    async def generate_monthly_report(self, days: int = 30) -> MonthlyReportResponse:
+    async def generate_monthly_report(self, user_id: int, days: int = 30) -> MonthlyReportResponse:
         cutoff = datetime.now() - timedelta(days=days)
 
         # overall glucose
@@ -663,9 +663,9 @@ RECOMMENDATIONS
 
         # all sections
         weekly = self._weekly_trends(days)
-        basal = self._basal_assessment(cutoff)
-        bolus = self._bolus_patterns(cutoff)
-        hypo = self._hypo_analysis(cutoff)
+        basal = self._basal_assessment(user_id, cutoff)
+        bolus = self._bolus_patterns(user_id, cutoff)
+        hypo = self._hypo_analysis(user_id, cutoff)
 
         # build report object for prompt
         report_dict: Dict[str, Any] = {

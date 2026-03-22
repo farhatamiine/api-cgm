@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from core.auth import get_current_user
 from core.dependencies import get_bolus_service, get_glucose_service
 from schemas.bolus import BolusCreate, BolusResponse, BolusTimingResponse
 from services.bolus_service import BolusService
@@ -34,6 +35,7 @@ def get_bolus(
 )
 def create_bolus(
     payload: BolusCreate,
+    current_user=Depends(get_current_user),
     service: BolusService = Depends(get_bolus_service),
 ):
     """
@@ -45,7 +47,7 @@ def create_bolus(
     - **glucose_at_time**: BG reading at injection time (mg/dL)
     """
     try:
-        return service.create_bolus(payload)
+        return service.create_bolus(payload, user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)

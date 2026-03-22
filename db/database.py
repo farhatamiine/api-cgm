@@ -22,6 +22,7 @@ def create_tables():
     import db.models.hypo_event
     import db.models.meal_log
     import db.models.summary
+    import db.models.user
 
     Base.metadata.create_all(bind=engine)
 

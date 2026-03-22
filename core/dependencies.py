@@ -1,5 +1,3 @@
-"""from functools import lru_cache"""
-
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
@@ -36,7 +34,8 @@ def get_insights_service(
     glucose_service: GlucoseService = Depends(get_glucose_service),
 ) -> InsightsService:
     settings = get_settings()
-    return InsightsService(db=db, glucose_service=glucose_service, settings=settings)
+    meal_service = MealService(db)
+    return InsightsService(db=db, glucose_service=glucose_service, meal_service=meal_service, settings=settings)
 
 
 def get_monthly_report_service(

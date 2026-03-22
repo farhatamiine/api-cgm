@@ -13,7 +13,7 @@ class MealCreate(BaseModel):
 
 
 class MealUpdate(BaseModel):
-    glucose_peak: Optional[float] = None
+    glucose_peak: float
     result: Optional[str] = Field(None, pattern="^(spike|stable|low)$")
 
 

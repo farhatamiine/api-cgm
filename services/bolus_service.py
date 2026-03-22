@@ -13,7 +13,7 @@ class BolusService:
         self.db = db
         self.glucose_service = glucose_service
 
-    def create_bolus(self, payload: BolusCreate) -> BolusLog:
+    def create_bolus(self, payload: BolusCreate, user_id: int) -> BolusLog:
         """Persist a bolus event to the database."""
 
         if payload.glucose_at_injection is None:
@@ -32,6 +32,7 @@ class BolusService:
             glucose_at_injection=glucose,
             inject_to_meal_min=payload.inject_to_meal_min,
             notes=payload.notes,
+            user_id=user_id,
         )
         try:
             self.db.add(bolus)

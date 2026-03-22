@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from core.auth import get_current_user
 from core.dependencies import get_basal_service
 from schemas.basal import BasalCreate, BasalResponse
 from services.basal_service import BasalService
@@ -15,6 +16,7 @@ basal_router = APIRouter()
 )
 def create_basal(
     payload: BasalCreate,
+    current_user=Depends(get_current_user),
     service: BasalService = Depends(get_basal_service),
 ):
     """
@@ -25,7 +27,7 @@ def create_basal(
     - **time**: `Night` | `Morning`
     """
     try:
-        return service.create_basal(payload)
+        return service.create_basal(payload, user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
