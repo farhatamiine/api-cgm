@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
@@ -17,3 +17,4 @@ class HypoEvent(Base):
     recovery_min = Column(Integer, nullable=True)
     treated_with: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     notes = Column(String, nullable=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
@@ -18,3 +18,4 @@ class BasalLog(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now(timezone.utc)
     )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

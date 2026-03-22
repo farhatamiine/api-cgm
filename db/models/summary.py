@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Column, Date, Float, Integer, String, Text
+from sqlalchemy import Column, Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
@@ -8,9 +8,10 @@ from db.database import Base
 
 class DailySummary(Base):
     __tablename__ = "daily_summaries"
+    __table_args__ = (UniqueConstraint("date", "user_id", name="uq_daily_summary_date_user"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    date = Column(Date, nullable=False, unique=True)
+    date = Column(Date, nullable=False)
     tir = Column(Float(4), nullable=True)
     tar = Column(Float(4), nullable=True)
     tbr = Column(Float(4), nullable=True)
@@ -22,3 +23,4 @@ class DailySummary(Base):
     worst_meal = Column(String, nullable=True)
     best_meal = Column(String, nullable=True)
     ai_insight: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

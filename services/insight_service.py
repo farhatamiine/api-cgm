@@ -11,6 +11,7 @@ from db.models.bolus_log import BolusLog
 from db.models.hypo_event import HypoEvent
 from db.models.summary import DailySummary
 from services.glucose_service import GlucoseService
+from services.meal_service import MealService
 
 logger = get_logger(__name__)
 
@@ -21,10 +22,15 @@ MOCK_MODE = True
 
 class InsightsService:
     def __init__(
-        self, db: Session, glucose_service: GlucoseService, settings: Settings
+        self,
+        db: Session,
+        glucose_service: GlucoseService,
+        meal_service: MealService,
+        settings: Settings,
     ) -> None:
         self.db = db
         self.glucose_service = glucose_service
+        self.meal_service = meal_service
         self.settings = settings
 
     # ── Cache check ────────────────────────────────────────────────────────
@@ -49,6 +55,7 @@ class InsightsService:
         """
         glucose_report = self.glucose_service.get_full_report(days=str(days))
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        meal_correlation = self.meal_service.get_correlation(days=str(days))
 
         # hypo stats from DB
         hypo_count = (

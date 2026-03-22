@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
@@ -21,3 +21,4 @@ class BolusLog(Base):
     inject_to_meal_min = Column(Integer, nullable=True)  # how many min before eating
     notes = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
