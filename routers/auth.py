@@ -21,6 +21,9 @@ auth_router = APIRouter()
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
+    height: float | None = None
+    weight: float | None = None
+    glucose_unit: str = "mg/dL"
 
 
 class UserResponse(BaseModel):
@@ -35,7 +38,13 @@ class UserResponse(BaseModel):
 def register(
     data: RegisterRequest, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    user = User(email=data.email, hashed_password=get_password_hash(data.password))
+    user = User(
+        email=data.email,
+        hashed_password=get_password_hash(data.password),
+        height=data.height,
+        weight=data.weight,
+        glucose_unit=data.glucose_unit,
+    )
     db.add(user)
     try:
         db.commit()

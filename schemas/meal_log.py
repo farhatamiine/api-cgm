@@ -9,7 +9,6 @@ class MealCreate(BaseModel):
     carbs_g: Optional[float] = Field(None, ge=0, le=500)
     description: Optional[str] = Field(None, max_length=500)
     glucose_before: Optional[float] = None
-    notes: Optional[str] = None
 
 
 class MealUpdate(BaseModel):

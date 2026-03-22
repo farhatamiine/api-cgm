@@ -5,11 +5,14 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://amine:cgmdb@glucodb:5432/cgmdb
       - NIGHTSCOUT_URL=${NIGHTSCOUT_URL}
       - NIGHTSCOUT_SECRET=${NIGHTSCOUT_SECRET}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       glucodb:
         condition: service_healthy
@@ -22,6 +25,8 @@ services:
     image: postgres:16-alpine
     container_name: glucodb
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

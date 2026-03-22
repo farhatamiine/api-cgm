@@ -31,7 +31,8 @@ class MealService:
         # Auto-calculate result from delta
         if meal.glucose_before:
             delta = glucose_peak - meal.glucose_before
-            meal.result = "spike" if delta > 3.9 else "low" if delta < -1 else "stable"
+            # delta is in mg/dL
+            meal.result = "spike" if delta > 70 else "low" if delta < -18 else "stable"
         self.db.commit()
         self.db.refresh(meal)
         return meal

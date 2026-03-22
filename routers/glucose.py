@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
-from typing import Dict, Any
-from utils.glucose import calculate_bmi
-from schemas.glucose import GlucoseFullReport
-from services.glucose_service import GlucoseService
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
 from core.auth import get_current_user
 from core.dependencies import get_glucose_service
 from db.models.user import User
+from schemas.glucose import GlucoseFullReport
+from services.glucose_service import GlucoseService
+from utils.glucose import calculate_bmi
 
 glucose_router = APIRouter()
 
@@ -30,10 +32,10 @@ def get_report(
 @glucose_router.post("/analyse")
 def analyse(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
     """
-    Analyzes user-specific data like BMI and basal units.
+    Analyzes user-specific data like BMI.
     """
     return {
-        "user": current_user.full_name,
+        "user": current_user.email,
         "bmi": calculate_bmi(current_user),
-        "basal_units": current_user.basal_unit,
+        "glucose_unit": current_user.glucose_unit,
     }
