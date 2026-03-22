@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from core.auth import get_current_user
 from core.dependencies import get_bolus_service, get_glucose_service
+from db.models.user import User
 from schemas.bolus import BolusCreate, BolusResponse, BolusTimingResponse
 from services.bolus_service import BolusService
 from services.glucose_service import GlucoseService
@@ -35,7 +36,7 @@ def get_bolus(
 )
 def create_bolus(
     payload: BolusCreate,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     service: BolusService = Depends(get_bolus_service),
 ):
     """

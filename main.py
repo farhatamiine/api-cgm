@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from db.database import check_connection, create_tables
+from routers.auth import auth_router
 from routers.basal import basal_router
 from routers.bolus import bolus_router
 from routers.glucose import glucose_router
@@ -33,3 +34,4 @@ app.include_router(hypo_router, prefix="/api/v1/hypo", tags=["hypo"])
 app.include_router(insights_router, prefix="/api/v1/insights", tags=["insights"])
 app.include_router(reports_router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(meal_router, prefix="/api/v1/meal", tags=["meal"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
