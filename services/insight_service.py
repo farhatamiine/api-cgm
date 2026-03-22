@@ -35,11 +35,12 @@ class InsightsService:
 
     # ── Cache check ────────────────────────────────────────────────────────
 
-    def _get_cached_insight(self) -> Optional[DailySummary]:
+    def _get_cached_insight(self, user_id: int) -> Optional[DailySummary]:
         """Return today's summary if it already has an AI insight."""
         return (
             self.db.query(DailySummary)
             .filter(
+                DailySummary.user_id == user_id,
                 DailySummary.date == date.today(),
                 DailySummary.ai_insight.isnot(None),
             )
@@ -182,13 +183,17 @@ Max 200 words."""
 
     # ── Save to DB ─────────────────────────────────────────────────────────
 
-    def _save_to_summary(self, insight: str) -> DailySummary:
+    def _save_to_summary(self, insight: str, user_id: int) -> DailySummary:
         today = date.today()
-        summary = self.db.query(DailySummary).filter(DailySummary.date == today).first()
+        summary = (
+            self.db.query(DailySummary)
+            .filter(DailySummary.user_id == user_id, DailySummary.date == today)
+            .first()
+        )
         if summary:
             summary.ai_insight = insight
         else:
-            summary = DailySummary(date=today, ai_insight=insight)
+            summary = DailySummary(date=today, user_id=user_id, ai_insight=insight)
             self.db.add(summary)
         self.db.commit()
         self.db.refresh(summary)
@@ -198,7 +203,7 @@ Max 200 words."""
 
     async def get_weekly_insight(self, user_id: int, days: int = 7) -> Dict[str, Any]:
         # 1. check cache
-        cached = self._get_cached_insight()
+        cached = self._get_cached_insight(user_id=user_id)
         if cached:
             logger.info("Returning cached insight — no API call made")
             return {
@@ -220,7 +225,7 @@ Max 200 words."""
         logger.info(f"Claude responded — tokens used: {tokens}")
 
         # 4. cache to DB
-        self._save_to_summary(insight)
+        self._save_to_summary(insight, user_id=user_id)
 
         return {
             "date": date.today(),

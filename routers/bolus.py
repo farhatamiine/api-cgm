@@ -15,6 +15,7 @@ def get_bolus(
     meal_type: str = Query(
         default="medium_gi", description="Type of meal (low_gi, medium_gi, high_gi)"
     ),
+    current_user: User = Depends(get_current_user),
     service: GlucoseService = Depends(get_glucose_service),
 ):
     """

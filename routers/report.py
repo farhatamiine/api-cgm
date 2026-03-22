@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 
 from core.auth import get_current_user
 from core.dependencies import get_monthly_report_service
+from db.models.user import User
 from schemas.report import MonthlyReportResponse
 from services.report_service import REPORTS_DIR, MonthlyReportService
 
@@ -44,9 +45,12 @@ async def generate_monthly_report(
     summary="Download PDF report",
     response_class=FileResponse,
 )
-def download_report(report_date: date):
+def download_report(
+    report_date: date,
+    current_user: User = Depends(get_current_user),
+):
     """Download the generated PDF report for a given date."""
-    path = os.path.join(REPORTS_DIR, f"glucoapi_report_{report_date.isoformat()}.pdf")
+    path = os.path.join(REPORTS_DIR, f"glucoapi_report_{current_user.id}_{report_date.isoformat()}.pdf")
     if not os.path.exists(path):
         raise HTTPException(
             status_code=404, detail="Report not found. Generate it first."

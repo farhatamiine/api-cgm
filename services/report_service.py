@@ -238,7 +238,7 @@ HYPOGLYCAEMIA:
 - Average lowest BG:  {data["hypo"]["avg_lowest_value"]} mg/dL
 - Average duration:   {data["hypo"]["avg_duration_min"]} min
 - Nocturnal hypos:    {data["hypo"]["nocturnal_count"]}
-- Most common hour:   {data["hypo"]["most_common_hour"]}:00
+- Most common hour:   {f'{data["hypo"]["most_common_hour"]}:00' if data["hypo"]["most_common_hour"] is not None else "N/A"}
 - Most treated with:  {data["hypo"]["most_common_treatment"]}
 
 Please provide a structured clinical report with:
@@ -307,7 +307,7 @@ RECOMMENDATIONS
 
     # ── PDF generation ─────────────────────────────────────────────────────
 
-    def _generate_pdf(self, report: MonthlyReportResponse) -> str:
+    def _generate_pdf(self, report: MonthlyReportResponse, user_id: int) -> str:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -322,10 +322,10 @@ RECOMMENDATIONS
         )
 
         filename = os.path.join(
-            REPORTS_DIR, f"glucoapi_report_{report.generated_at}.pdf"
+            REPORTS_DIR, f"glucoapi_report_{user_id}_{report.generated_at}.pdf"
         )
 
-        print(f"Saving PDF to: {filename}")
+        logger.debug(f"Saving PDF to: {filename}")
         doc = SimpleDocTemplate(
             filename,
             pagesize=A4,
@@ -708,7 +708,8 @@ RECOMMENDATIONS
         # generate PDF
         pdf_url: Optional[str] = None
         try:
-            self._generate_pdf(report)
+            self._generate_pdf(report, user_id=user_id)
+            # user_id is not in the URL — the download endpoint resolves it from the auth token
             pdf_url = f"/api/v1/reports/download/{date.today()}"
         except Exception as e:
             logger.error(f"PDF generation failed: {e}")
